@@ -44,7 +44,12 @@ export async function analyticsRoutes(app: FastifyInstance) {
     }
 
     const payload: ShareAnalytics = {
-      share: { id: share.id, recipientName: share.recipientName, recipientEmail: share.recipientEmail },
+      share: {
+        id: share.id,
+        documentId: share.documentId,
+        recipientName: share.recipientName,
+        recipientEmail: share.recipientEmail,
+      },
       pageHeat,
       sessions: sessions.map((s) => ({
         id: s.id,

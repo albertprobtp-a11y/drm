@@ -33,6 +33,7 @@ export type SessionSummary = z.infer<typeof sessionSummarySchema>;
 export const shareAnalyticsSchema = z.object({
   share: z.object({
     id: z.string(),
+    documentId: z.string(),
     recipientName: z.string(),
     recipientEmail: z.string().email(),
   }),
