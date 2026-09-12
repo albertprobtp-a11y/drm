@@ -1,0 +1,159 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum DocumentStatus {
+  PENDING
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum AuditEventType {
+  OTP_SENT
+  OTP_FAILED
+  OTP_VERIFIED
+  OPENED
+  PAGE_VIEWED
+  BLURRED
+  PRINT_ATTEMPT
+  DENIED
+  EXPIRED
+  REVOKED
+}
+
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  passwordHash  String
+  name          String
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  documents     Document[]
+  refreshTokens RefreshToken[]
+}
+
+model RefreshToken {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  replacedBy String?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model Document {
+  id                String         @id @default(cuid())
+  userId            String
+  user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title             String
+  originalFilename  String
+  s3KeyEncrypted    String
+  dataKeyWrapped    String
+  encryptionIv      String
+  encryptionAuthTag String
+  checksumSha256    String
+  pageCount         Int            @default(0)
+  status            DocumentStatus @default(PENDING)
+  processingError   String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  pages             DocumentPage[]
+  shares            Share[]
+
+  @@index([userId])
+}
+
+model DocumentPage {
+  id         String   @id @default(cuid())
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  pageNumber Int
+  s3Key      String
+  width      Int
+  height     Int
+  createdAt  DateTime @default(now())
+
+  @@unique([documentId, pageNumber])
+}
+
+model Share {
+  id             String    @id @default(cuid())
+  documentId     String
+  document       Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  recipientEmail String
+  recipientName  String
+  canPrint       Boolean   @default(false)
+  expiresAt      DateTime?
+  maxViews       Int?
+  viewCount      Int       @default(0)
+  revokedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  // Point d'entrée signature électronique (phase 2, Yousign) — non implémenté ici.
+  signatureProvider  String?
+  signatureRequestId String?
+  signatureStatus    String?
+
+  sessions    ShareSession[]
+  auditEvents AuditEvent[]
+  pageViews   PageView[]
+
+  @@index([documentId])
+  @@index([recipientEmail])
+}
+
+model ShareSession {
+  id                String    @id @default(cuid())
+  shareId           String
+  share             Share     @relation(fields: [shareId], references: [id], onDelete: Cascade)
+  token             String    @unique
+  ip                String
+  userAgent         String
+  deviceFingerprint String?
+  otpVerifiedAt     DateTime?
+  expiresAt         DateTime
+  revokedAt         DateTime?
+  createdAt         DateTime  @default(now())
+
+  auditEvents AuditEvent[]
+  pageViews   PageView[]
+
+  @@index([shareId])
+}
+
+model AuditEvent {
+  id             String         @id @default(cuid())
+  shareId        String
+  share          Share          @relation(fields: [shareId], references: [id], onDelete: Cascade)
+  shareSessionId String?
+  shareSession   ShareSession?  @relation(fields: [shareSessionId], references: [id], onDelete: SetNull)
+  type           AuditEventType
+  payload        Json
+  createdAt      DateTime       @default(now())
+
+  @@index([shareId, createdAt])
+}
+
+model PageView {
+  id             String       @id @default(cuid())
+  shareId        String
+  share          Share        @relation(fields: [shareId], references: [id], onDelete: Cascade)
+  shareSessionId String
+  shareSession   ShareSession @relation(fields: [shareSessionId], references: [id], onDelete: Cascade)
+  pageNumber     Int
+  durationMs     Int
+  createdAt      DateTime     @default(now())
+
+  @@index([shareId, pageNumber])
+}
